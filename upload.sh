@@ -2,48 +2,41 @@
 set -e
 
 # --- Configuration ---
-# Path to rshell executable
 RSHELL_EXEC="/Users/devbook/Documents/pet-project/drone/esptoolenv/bin/rshell"
-# Serial port of your device
 PORT="/dev/tty.usbmodem2101"
-# rshell options, using --buffer-size as it's the standard long option
 RSHELL_OPTS="-p $PORT --buffer-size 32"
-# Local and remote directories
 LOCAL_SRC_DIR="src"
 REMOTE_PYBOARD_DIR="/pyboard"
 
 # --- rshell wrapper function ---
 run_rshell() {
     echo "Executing: rshell $@"
-    # Quoting arguments to handle spaces or special characters
     $RSHELL_EXEC $RSHELL_OPTS "$@"
 }
 
 # --- Main script ---
-echo "Starting upload process..."
+echo "Starting robust upload process..."
 
-# Create remote directories. The '|| true' part ensures that the script doesn't fail if the directory already exists.
-run_rshell "mkdir $REMOTE_PYBOARD_DIR/utils" || true
+# 1. Remove old files to ensure a clean slate.
+# The '|| true' prevents failure if the file doesn't exist.
+echo "Step 1: Removing old files from $REMOTE_PYBOARD_DIR..."
+run_rshell "rm $REMOTE_PYBOARD_DIR/main.py" || true
+run_rshell "rm $REMOTE_PYBOARD_DIR/server.py" || true
+run_rshell "rm $REMOTE_PYBOARD_DIR/fc.py" || true
+run_rshell "rm $REMOTE_PYBOARD_DIR/index.html" || true
+echo "Old files removed."
 
-# Copy all files from the root of the local source directory
-echo "Copying files from $LOCAL_SRC_DIR to $REMOTE_PYBOARD_DIR..."
+# 2. Copy all files from the local source directory
+echo "Step 2: Copying new files from $LOCAL_SRC_DIR to $REMOTE_PYBOARD_DIR..."
 for file in "$LOCAL_SRC_DIR"/*; do
-    # Check if it is a file before trying to copy
     if [ -f "$file" ]; then
         run_rshell "cp '$file' '$REMOTE_PYBOARD_DIR/'"
     fi
 done
+echo "New files copied."
 
-# Copy all files from the local utils directory if it exists
-if [ -d "$LOCAL_SRC_DIR/utils" ]; then
-    echo "Copying files from $LOCAL_SRC_DIR/utils to $REMOTE_PYBOARD_DIR/utils..."
-    for file in "$LOCAL_SRC_DIR"/utils/*; do
-        if [ -f "$file" ]; then
-            run_rshell "cp '$file' '$REMOTE_PYBOARD_DIR/utils/'"
-        fi
-    done
-else
-    echo "Local directory $LOCAL_SRC_DIR/utils not found, skipping."
-fi
+# 3. Verify that the main file exists on the board
+echo "Step 3: Verifying main.py on pyboard..."
+run_rshell "ls $REMOTE_PYBOARD_DIR"
 
-echo "Upload finished successfully."
+echo "Upload finished successfully. Please reset the device."
