@@ -339,3 +339,166 @@ class FlightController:
         print("\nDid you hear/see any motor movement? (Check physically)")
         print("If motors moved, the control chain is working!")
         print("If no movement, check ESC connections and power.")
+
+    # --- Flight Movement Control Methods ---
+
+    def _send_motor_command(self, motor_values):
+        """Send motor values directly to FC (bypasses safety checks)."""
+        if len(motor_values) != 8:
+            print("ERROR: Motor values must be 8 values (4 motors + 4 servos)")
+            return False
+            
+        payload = struct.pack('<8H', *motor_values)
+        MSP_SET_MOTOR = 214
+        self._send_msp_request(MSP_SET_MOTOR, payload)
+        self._read_msp_response()
+        return True
+
+    def emergency_stop(self):
+        """Emergency stop - cut all motor power immediately."""
+        print("🚨 EMERGENCY STOP - Cutting all motor power!")
+        motor_values = [1000, 1000, 1000, 1000, 0, 0, 0, 0]  # All motors off
+        self._send_motor_command(motor_values)
+        time.sleep_ms(100)
+
+    def hover(self, throttle=1100):
+        """Maintain hover at specified throttle level."""
+        print(f"Maintaining hover at throttle {throttle}")
+        motor_values = [throttle, throttle, throttle, throttle, 0, 0, 0, 0]
+        self._send_motor_command(motor_values)
+
+    def move_up(self, power=1050, duration_ms=500):
+        """Move drone upward."""
+        print(f"🚀 Moving UP (power: {power})")
+        motor_values = [power, power, power, power, 0, 0, 0, 0]
+        self._send_motor_command(motor_values)
+        time.sleep_ms(duration_ms)
+        self.hover()  # Return to hover
+
+    def move_down(self, power=1080, duration_ms=500):
+        """Move drone downward (slightly higher throttle for controlled descent)."""
+        print(f"⬇️ Moving DOWN (power: {power})")
+        motor_values = [power, power, power, power, 0, 0, 0, 0]
+        self._send_motor_command(motor_values)
+        time.sleep_ms(duration_ms)
+        self.hover()  # Return to hover
+
+    def move_forward(self, power=1120, duration_ms=500):
+        """Move drone forward (increase front motors, decrease rear motors)."""
+        print(f"⬆️ Moving FORWARD (power: {power})")
+        # Assuming quadcopter layout: motors 0&1 front, motors 2&3 rear
+        motor_values = [power, power, power-50, power-50, 0, 0, 0, 0]
+        self._send_motor_command(motor_values)
+        time.sleep_ms(duration_ms)
+        self.hover()  # Return to hover
+
+    def move_backward(self, power=1120, duration_ms=500):
+        """Move drone backward (increase rear motors, decrease front motors)."""
+        print(f"⬇️ Moving BACKWARD (power: {power})")
+        # Assuming quadcopter layout: motors 0&1 front, motors 2&3 rear
+        motor_values = [power-50, power-50, power, power, 0, 0, 0, 0]
+        self._send_motor_command(motor_values)
+        time.sleep_ms(duration_ms)
+        self.hover()  # Return to hover
+
+    def move_left(self, power=1120, duration_ms=500):
+        """Move drone left (increase right motors, decrease left motors)."""
+        print(f"⬅️ Moving LEFT (power: {power})")
+        # Assuming quadcopter layout: motors 0&2 left, motors 1&3 right
+        motor_values = [power-50, power, power-50, power, 0, 0, 0, 0]
+        self._send_motor_command(motor_values)
+        time.sleep_ms(duration_ms)
+        self.hover()  # Return to hover
+
+    def move_right(self, power=1120, duration_ms=500):
+        """Move drone right (increase left motors, decrease right motors)."""
+        print(f"➡️ Moving RIGHT (power: {power})")
+        # Assuming quadcopter layout: motors 0&2 left, motors 1&3 right
+        motor_values = [power, power-50, power, power-50, 0, 0, 0, 0]
+        self._send_motor_command(motor_values)
+        time.sleep_ms(duration_ms)
+        self.hover()  # Return to hover
+
+    def rotate_clockwise(self, power=1150, duration_ms=300):
+        """Rotate drone clockwise (yaw right)."""
+        print(f"🔄 Rotating CLOCKWISE (power: {power})")
+        # For clockwise rotation: increase front-right and rear-left, decrease others
+        motor_values = [power-30, power, power, power-30, 0, 0, 0, 0]
+        self._send_motor_command(motor_values)
+        time.sleep_ms(duration_ms)
+        self.hover()  # Return to hover
+
+    def rotate_counterclockwise(self, power=1150, duration_ms=300):
+        """Rotate drone counterclockwise (yaw left)."""
+        print(f"🔄 Rotating COUNTERCLOCKWISE (power: {power})")
+        # For counterclockwise rotation: increase front-left and rear-right, decrease others
+        motor_values = [power, power-30, power-30, power, 0, 0, 0, 0]
+        self._send_motor_command(motor_values)
+        time.sleep_ms(duration_ms)
+        self.hover()  # Return to hover
+
+    def takeoff(self, target_throttle=1150, steps=10):
+        """Gradual takeoff to target throttle."""
+        print(f"🛫 Taking off to throttle {target_throttle}")
+        base_throttle = 1000
+        step_size = (target_throttle - base_throttle) // steps
+        
+        for i in range(steps):
+            current_throttle = base_throttle + (step_size * (i + 1))
+            motor_values = [current_throttle, current_throttle, current_throttle, current_throttle, 0, 0, 0, 0]
+            self._send_motor_command(motor_values)
+            time.sleep_ms(200)
+        
+        print("✅ Takeoff complete - holding hover")
+        self.hover(target_throttle)
+
+    def land(self, start_throttle=1150, steps=15):
+        """Gradual landing from current throttle."""
+        print(f"🛬 Landing from throttle {start_throttle}")
+        end_throttle = 1000
+        step_size = (start_throttle - end_throttle) // steps
+        
+        for i in range(steps):
+            current_throttle = start_throttle - (step_size * (i + 1))
+            if current_throttle < 1000:
+                current_throttle = 1000
+            motor_values = [current_throttle, current_throttle, current_throttle, current_throttle, 0, 0, 0, 0]
+            self._send_motor_command(motor_values)
+            time.sleep_ms(300)
+        
+        print("✅ Landing complete - motors off")
+        self.emergency_stop()
+
+    def flight_test_sequence(self):
+        """Run a complete flight test sequence."""
+        print("🎯 Starting Flight Test Sequence")
+        print("⚠️  Make sure propellers are ON and area is clear!")
+        
+        # Takeoff
+        self.takeoff(1180, 15)
+        time.sleep(2)
+        
+        # Basic movements
+        self.move_up(1200, 800)
+        time.sleep(1)
+        
+        self.move_forward(1220, 600)
+        time.sleep(1)
+        
+        self.move_left(1220, 600)
+        time.sleep(1)
+        
+        self.rotate_clockwise(1250, 400)
+        time.sleep(1)
+        
+        # Return to center
+        self.move_right(1220, 600)
+        time.sleep(1)
+        
+        self.move_backward(1220, 600)
+        time.sleep(1)
+        
+        # Land
+        self.land(1180, 20)
+        
+        print("🎉 Flight test sequence complete!")
